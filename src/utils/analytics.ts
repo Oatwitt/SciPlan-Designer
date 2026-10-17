@@ -5,13 +5,11 @@ export interface StudentRecord {
   firstName: string;
   lastName: string;
   classroom: string;
-  attendanceRate: number; // 0 - 100
-  pretest: number; // Max 20 (สอบก่อนเรียน 20 คะแนน)
-  unit1: number; // Max 20 (สอนแผนที่ 1: 20 คะแนน)
-  unit2: number; // Max 20 (สอนแผนที่ 2: 20 คะแนน)
-  unit3: number; // Max 20 (สอนแผนที่ 3: 20 คะแนน)
-  posttest: number; // Max 20 (สอบหลังเรียน 20 คะแนน - E2)
-  affective: number; // Max 20 (จิตพิสัยและการมีส่วนร่วม 20 คะแนน)
+  pretest: number; // สอบก่อนเรียน (เต็ม 20 คะแนน)
+  completedPlan1: boolean; // เข้าเรียน/ทำกิจกรรม สอนแผนที่ 1 (ไม่มีการเก็บคะแนน)
+  completedPlan2: boolean; // เข้าเรียน/ทำกิจกรรม สอนแผนที่ 2 (ไม่มีการเก็บคะแนน)
+  completedPlan3: boolean; // เข้าเรียน/ทำกิจกรรม สอนแผนที่ 3 (ไม่มีการเก็บคะแนน)
+  posttest: number; // สอบหลังเรียน (เต็ม 20 คะแนน)
   learningStyle: 'Visual' | 'Kinesthetic' | 'Analytical' | 'Collaborative';
   researchTargetGroup: boolean; // นักเรียนกลุ่มเป้าหมายวิจัยในชั้นเรียน
   teacherNote: string;
@@ -26,8 +24,8 @@ export interface ResearchIntervention {
   lessonPlanNumber: 1 | 2 | 3;
   innovationUsed: string;
   problemObserved: string;
-  scoreBefore: number;
-  scoreAfter: number;
+  scoreBefore: number; // ก่อนเรียน (เต็ม 20)
+  scoreAfter: number; // หลังเรียน (เต็ม 20)
   reflectionOutcome: string;
   status: 'กำลังดำเนินการ' | 'บรรลุเป้าหมาย' | 'ต้องปรับแผนซ้ำ';
 }
@@ -36,7 +34,7 @@ export interface LessonPlanSpec {
   planNumber: 1 | 2 | 3;
   title: string;
   activityName: string;
-  maxScore: number;
+  durationHours: number;
   targetSkill: string;
 }
 
@@ -47,8 +45,7 @@ export interface ResearchProjectConfig {
   semester: string;
   targetClassroom: string;
   innovationName: string;
-  criterionE1: number; // e.g., 80
-  criterionE2: number; // e.g., 80
+  targetCriterionPct: number; // เกณฑ์ผ่านหลังเรียน เช่น ร้อยละ 80 (16/20 คะแนน)
   researchHypothesis: string;
   lessonPlans: LessonPlanSpec[];
   planSummary: string;
@@ -59,13 +56,7 @@ export interface ResearchProjectConfig {
 
 export const SCORE_MAX = {
   pretest: 20, // สอบก่อนเรียน 20 คะแนน
-  unit1: 20, // แผนการจัดการเรียนรู้ที่ 1 (20 คะแนน)
-  unit2: 20, // แผนการจัดการเรียนรู้ที่ 2 (20 คะแนน)
-  unit3: 20, // แผนการจัดการเรียนรู้ที่ 3 (20 คะแนน)
   posttest: 20, // สอบหลังเรียน 20 คะแนน
-  affective: 20, // จิตพิสัย 20 คะแนน
-  total: 100, // แผน 1 (20) + แผน 2 (20) + แผน 3 (20) + หลังเรียน (20) + จิตพิสัย (20) = 100
-  formativeTotal: 60, // รวมคะแนนระหว่างเรียน 3 แผน (20 + 20 + 20 = 60 คะแนน สำหรับคำนวณ E1)
 } as const;
 
 export function clampScore(value: number, max: number): number {
@@ -74,44 +65,41 @@ export function clampScore(value: number, max: number): number {
   return Math.round(value * 10) / 10;
 }
 
-// คะแนนรวมระหว่างเรียน 3 แผน (เต็ม 60 คะแนน) สำหรับคำนวณ E1
-export function calculateThreePlansScore(
-  student: Pick<StudentRecord, 'unit1' | 'unit2' | 'unit3'>
-): number {
-  const sum =
-    Number(student.unit1 || 0) +
-    Number(student.unit2 || 0) +
-    Number(student.unit3 || 0);
-  return Math.round(sum * 10) / 10;
+// คำนวณร้อยละของคะแนนสอบก่อนเรียน (0 - 100%)
+export function calculatePretestPct(student: Pick<StudentRecord, 'pretest'>): number {
+  return Math.round(((Number(student.pretest || 0)) / SCORE_MAX.pretest) * 1000) / 10;
 }
 
-// คะแนนรวมสุทธิ 100 คะแนน = แผนที่ 1 (20) + แผนที่ 2 (20) + แผนที่ 3 (20) + สอบหลังเรียน (20) + จิตพิสัย (20)
-export function calculateTotalScore(
-  student: Pick<StudentRecord, 'unit1' | 'unit2' | 'unit3' | 'posttest' | 'affective'>
-): number {
-  const sum =
-    Number(student.unit1 || 0) +
-    Number(student.unit2 || 0) +
-    Number(student.unit3 || 0) +
-    Number(student.posttest || 0) +
-    Number(student.affective || 0);
-  return Math.round(sum * 10) / 10;
+// คำนวณร้อยละของคะแนนสอบหลังเรียน (0 - 100%)
+export function calculatePosttestPct(student: Pick<StudentRecord, 'posttest'>): number {
+  return Math.round(((Number(student.posttest || 0)) / SCORE_MAX.posttest) * 1000) / 10;
 }
 
-export function calculateFormativeScore(
-  student: Pick<StudentRecord, 'unit1' | 'unit2' | 'unit3'>
-): number {
-  return calculateThreePlansScore(student);
+// คะแนนพัฒนาการ (ผลต่าง หลังเรียน - ก่อนเรียน เต็ม 20 คะแนน)
+export function calculateScoreDiff(student: Pick<StudentRecord, 'pretest' | 'posttest'>): number {
+  return Math.round((Number(student.posttest || 0) - Number(student.pretest || 0)) * 10) / 10;
 }
 
-export function calculateThaiGrade(totalScore: number): number {
-  if (totalScore >= 80) return 4;
-  if (totalScore >= 75) return 3.5;
-  if (totalScore >= 70) return 3;
-  if (totalScore >= 65) return 2.5;
-  if (totalScore >= 60) return 2;
-  if (totalScore >= 55) return 1.5;
-  if (totalScore >= 50) return 1;
+// นับจำนวนแผนการเรียนรู้ที่นักเรียนเข้าร่วม (เต็ม 3 แผน)
+export function countCompletedPlans(
+  student: Pick<StudentRecord, 'completedPlan1' | 'completedPlan2' | 'completedPlan3'>
+): number {
+  return (
+    (student.completedPlan1 ? 1 : 0) +
+    (student.completedPlan2 ? 1 : 0) +
+    (student.completedPlan3 ? 1 : 0)
+  );
+}
+
+// ตัดเกรดจากร้อยละคะแนนสอบหลังเรียน (0 - 100%)
+export function calculateThaiGrade(posttestPercentage: number): number {
+  if (posttestPercentage >= 80) return 4;
+  if (posttestPercentage >= 75) return 3.5;
+  if (posttestPercentage >= 70) return 3;
+  if (posttestPercentage >= 65) return 2.5;
+  if (posttestPercentage >= 60) return 2;
+  if (posttestPercentage >= 55) return 1.5;
+  if (posttestPercentage >= 50) return 1;
   return 0;
 }
 
@@ -163,87 +151,13 @@ export function calculateNormalizedGain(
   return { gain, level: 'Low Gain', levelThai: 'พัฒนาการระดับต่ำ (g < 0.30)' };
 }
 
-export interface E1E2AnalysisResult {
-  e1: number; // ประสิทธิภาพกระบวนการจากคะแนนรวม 3 แผน (เต็ม 60)
-  e2: number; // ประสิทธิภาพผลลัพธ์จากคะแนนสอบหลังเรียน (เต็ม 20)
-  plan1Pct: number;
-  plan2Pct: number;
-  plan3Pct: number;
-  criterionE1: number;
-  criterionE2: number;
-  meetsE1: boolean;
-  meetsE2: boolean;
-  meetsBoth: boolean;
-}
-
-export function calculateE1E2(
-  students: StudentRecord[],
-  criterionE1: number = 80,
-  criterionE2: number = 80
-): E1E2AnalysisResult {
-  if (students.length === 0) {
-    return {
-      e1: 0,
-      e2: 0,
-      plan1Pct: 0,
-      plan2Pct: 0,
-      plan3Pct: 0,
-      criterionE1,
-      criterionE2,
-      meetsE1: false,
-      meetsE2: false,
-      meetsBoth: false,
-    };
-  }
-
-  const n = students.length;
-  const plan1Pct =
-    Math.round(
-      (students.reduce((acc, s) => acc + (s.unit1 / SCORE_MAX.unit1) * 100, 0) / n) * 10
-    ) / 10;
-  const plan2Pct =
-    Math.round(
-      (students.reduce((acc, s) => acc + (s.unit2 / SCORE_MAX.unit2) * 100, 0) / n) * 10
-    ) / 10;
-  const plan3Pct =
-    Math.round(
-      (students.reduce((acc, s) => acc + (s.unit3 / SCORE_MAX.unit3) * 100, 0) / n) * 10
-    ) / 10;
-
-  const totalFormativePct = students.reduce((acc, s) => {
-    const threePlans = calculateThreePlansScore(s);
-    return acc + (threePlans / SCORE_MAX.formativeTotal) * 100;
-  }, 0);
-
-  const totalPosttestPct = students.reduce((acc, s) => {
-    return acc + (s.posttest / SCORE_MAX.posttest) * 100;
-  }, 0);
-
-  const e1 = Math.round((totalFormativePct / n) * 100) / 100;
-  const e2 = Math.round((totalPosttestPct / n) * 100) / 100;
-
-  const meetsE1 = e1 >= criterionE1;
-  const meetsE2 = e2 >= criterionE2;
-
-  return {
-    e1,
-    e2,
-    plan1Pct,
-    plan2Pct,
-    plan3Pct,
-    criterionE1,
-    criterionE2,
-    meetsE1,
-    meetsE2,
-    meetsBoth: meetsE1 && meetsE2,
-  };
-}
-
 export interface DependentTTestResult {
   meanPre: number;
   sdPre: number;
+  meanPrePct: number;
   meanPost: number;
   sdPost: number;
+  meanPostPct: number;
   meanDiff: number;
   sdDiff: number;
   tStat: number;
@@ -268,12 +182,16 @@ function getCriticalT05(df: number): number {
 export function calculateDependentTTest(students: StudentRecord[]): DependentTTestResult {
   const n = students.length;
   if (n < 2) {
+    const pre = n === 1 ? students[0].pretest : 0;
+    const post = n === 1 ? students[0].posttest : 0;
     return {
-      meanPre: n === 1 ? students[0].pretest : 0,
+      meanPre: pre,
       sdPre: 0,
-      meanPost: n === 1 ? students[0].posttest : 0,
+      meanPrePct: (pre / 20) * 100,
+      meanPost: post,
       sdPost: 0,
-      meanDiff: n === 1 ? students[0].posttest - students[0].pretest : 0,
+      meanPostPct: (post / 20) * 100,
+      meanDiff: post - pre,
       sdDiff: 0,
       tStat: 0,
       df: 0,
@@ -306,8 +224,10 @@ export function calculateDependentTTest(students: StudentRecord[]): DependentTTe
   return {
     meanPre: Math.round(meanPre * 100) / 100,
     sdPre: Math.round(sdPre * 100) / 100,
+    meanPrePct: Math.round((meanPre / SCORE_MAX.pretest) * 1000) / 10,
     meanPost: Math.round(meanPost * 100) / 100,
     sdPost: Math.round(sdPost * 100) / 100,
+    meanPostPct: Math.round((meanPost / SCORE_MAX.posttest) * 1000) / 10,
     meanDiff: Math.round(meanDiff * 100) / 100,
     sdDiff: Math.round(sdDiff * 100) / 100,
     tStat: Math.round(tStat * 100) / 100,
@@ -319,27 +239,32 @@ export function calculateDependentTTest(students: StudentRecord[]): DependentTTe
 
 export interface ClassSummaryStats {
   studentCount: number;
-  meanTotal: number;
-  sdTotal: number;
-  maxTotal: number;
-  minTotal: number;
+  meanPostScore: number; // เต็ม 20
+  meanPostPct: number; // เต็ม 100%
+  sdPostScore: number;
+  maxPostScore: number;
+  minPostScore: number;
   meanGPA: number;
-  passCount: number;
-  passRate: number;
+  targetCriterionPct: number;
+  targetCriterionScore: number; // เช่น 16/20 สำหรับ 80%
+  passCriterionCount: number;
+  passCriterionRate: number;
   atRiskCount: number;
   highPerformingCount: number;
   averageNormalizedGain: number;
+  plan1AttendancePct: number;
+  plan2AttendancePct: number;
+  plan3AttendancePct: number;
   gradeDistribution: Record<string, number>;
-  e1e2: E1E2AnalysisResult;
   tTest: DependentTTestResult;
 }
 
 export function calculateClassSummary(
   students: StudentRecord[],
-  criterionE1: number = 80,
-  criterionE2: number = 80
+  targetCriterionPct: number = 80
 ): ClassSummaryStats {
   const n = students.length;
+  const targetCriterionScore = Math.round((targetCriterionPct / 100) * SCORE_MAX.posttest * 10) / 10;
   const emptyGrades: Record<string, number> = {
     '4': 0,
     '3.5': 0,
@@ -354,24 +279,30 @@ export function calculateClassSummary(
   if (n === 0) {
     return {
       studentCount: 0,
-      meanTotal: 0,
-      sdTotal: 0,
-      maxTotal: 0,
-      minTotal: 0,
+      meanPostScore: 0,
+      meanPostPct: 0,
+      sdPostScore: 0,
+      maxPostScore: 0,
+      minPostScore: 0,
       meanGPA: 0,
-      passCount: 0,
-      passRate: 0,
+      targetCriterionPct,
+      targetCriterionScore,
+      passCriterionCount: 0,
+      passCriterionRate: 0,
       atRiskCount: 0,
       highPerformingCount: 0,
       averageNormalizedGain: 0,
+      plan1AttendancePct: 0,
+      plan2AttendancePct: 0,
+      plan3AttendancePct: 0,
       gradeDistribution: emptyGrades,
-      e1e2: calculateE1E2([], criterionE1, criterionE2),
       tTest: calculateDependentTTest([]),
     };
   }
 
-  const totals = students.map((s) => calculateTotalScore(s));
-  const grades = totals.map((t) => calculateThaiGrade(t));
+  const postScores = students.map((s) => s.posttest);
+  const postPcts = students.map((s) => calculatePosttestPct(s));
+  const grades = postPcts.map((pct) => calculateThaiGrade(pct));
   const gains = students.map((s) => calculateNormalizedGain(s.pretest, s.posttest).gain);
 
   grades.forEach((g) => {
@@ -379,45 +310,56 @@ export function calculateClassSummary(
     emptyGrades[key] = (emptyGrades[key] || 0) + 1;
   });
 
-  const meanTotal = totals.reduce((a, b) => a + b, 0) / n;
-  const varTotal =
-    n > 1 ? totals.reduce((acc, v) => acc + Math.pow(v - meanTotal, 2), 0) / (n - 1) : 0;
-  const sdTotal = Math.sqrt(varTotal);
+  const tTest = calculateDependentTTest(students);
   const meanGPA = grades.reduce((a, b) => a + b, 0) / n;
   const avgGain = gains.reduce((a, b) => a + b, 0) / n;
 
-  const passCount = totals.filter((t) => t >= 50).length;
+  const passCriterionCount = postPcts.filter((pct) => pct >= targetCriterionPct).length;
   const atRiskCount = students.filter(
-    (s) => calculateTotalScore(s) < 65 || s.researchTargetGroup || s.posttest < 14
+    (s) => calculatePosttestPct(s) < 70 || s.researchTargetGroup
   ).length;
-  const highPerformingCount = totals.filter((t) => t >= 80).length;
+  const highPerformingCount = postPcts.filter((pct) => pct >= 80).length;
+
+  const plan1AttendancePct = Math.round(
+    (students.filter((s) => s.completedPlan1).length / n) * 100
+  );
+  const plan2AttendancePct = Math.round(
+    (students.filter((s) => s.completedPlan2).length / n) * 100
+  );
+  const plan3AttendancePct = Math.round(
+    (students.filter((s) => s.completedPlan3).length / n) * 100
+  );
 
   return {
     studentCount: n,
-    meanTotal: Math.round(meanTotal * 100) / 100,
-    sdTotal: Math.round(sdTotal * 100) / 100,
-    maxTotal: Math.max(...totals),
-    minTotal: Math.min(...totals),
+    meanPostScore: tTest.meanPost,
+    meanPostPct: tTest.meanPostPct,
+    sdPostScore: tTest.sdPost,
+    maxPostScore: Math.max(...postScores),
+    minPostScore: Math.min(...postScores),
     meanGPA: Math.round(meanGPA * 100) / 100,
-    passCount,
-    passRate: Math.round((passCount / n) * 1000) / 10,
+    targetCriterionPct,
+    targetCriterionScore,
+    passCriterionCount,
+    passCriterionRate: Math.round((passCriterionCount / n) * 1000) / 10,
     atRiskCount,
     highPerformingCount,
     averageNormalizedGain: Math.round(avgGain * 100) / 100,
+    plan1AttendancePct,
+    plan2AttendancePct,
+    plan3AttendancePct,
     gradeDistribution: emptyGrades,
-    e1e2: calculateE1E2(students, criterionE1, criterionE2),
-    tTest: calculateDependentTTest(students),
+    tTest,
   };
 }
 
 export interface StudentDiagnosticProfile {
   student: StudentRecord;
-  totalScore: number;
-  formativeScore: number; // คะแนนรวม 3 แผน (เต็ม 60)
-  formativePct: number; // E1 รายบุคคล (%)
   pretestPct: number;
-  posttestPct: number; // E2 รายบุคคล (%)
-  scoreDiff: number; // หลังเรียน - ก่อนเรียน
+  posttestPct: number;
+  scoreDiff: number; // หลังเรียน - ก่อนเรียน (เต็ม 20)
+  pctDiff: number; // ร้อยละที่เพิ่มขึ้น
+  completedPlansCount: number;
   grade: number;
   gradeLabel: string;
   rank: number;
@@ -425,14 +367,6 @@ export interface StudentDiagnosticProfile {
   normalizedGain: NormalizedGainResult;
   statusTier: 'At-Risk' | 'On-Track' | 'High-Performing';
   statusTierThai: string;
-  competencies: {
-    name: string;
-    score: number;
-    maxScore: number;
-    scorePct: number;
-    classAvgPct: number;
-    description: string;
-  }[];
   strengths: string[];
   areasForImprovement: string[];
   recommendedIntervention: string;
@@ -442,127 +376,80 @@ export function analyzeIndividualStudent(
   student: StudentRecord,
   allStudents: StudentRecord[]
 ): StudentDiagnosticProfile {
-  const totalScore = calculateTotalScore(student);
-  const formativeScore = calculateThreePlansScore(student);
-  const formativePct = Math.round((formativeScore / SCORE_MAX.formativeTotal) * 1000) / 10;
-  const pretestPct = Math.round((student.pretest / SCORE_MAX.pretest) * 1000) / 10;
-  const posttestPct = Math.round((student.posttest / SCORE_MAX.posttest) * 1000) / 10;
-  const scoreDiff = Math.round((student.posttest - student.pretest) * 10) / 10;
-  const grade = calculateThaiGrade(totalScore);
+  const pretestPct = calculatePretestPct(student);
+  const posttestPct = calculatePosttestPct(student);
+  const scoreDiff = calculateScoreDiff(student);
+  const pctDiff = Math.round((posttestPct - pretestPct) * 10) / 10;
+  const completedPlansCount = countCompletedPlans(student);
+  const grade = calculateThaiGrade(posttestPct);
   const gradeLabel = getGradeLabel(grade);
   const normalizedGain = calculateNormalizedGain(student.pretest, student.posttest);
 
-  const sortedTotals = [...allStudents]
-    .map((s) => calculateTotalScore(s))
+  const sortedPost = [...allStudents]
+    .map((s) => s.posttest)
     .sort((a, b) => b - a);
-  const rank = sortedTotals.findIndex((t) => t === totalScore) + 1 || 1;
-  const belowOrEqual = sortedTotals.filter((t) => t <= totalScore).length;
+  const rank = sortedPost.findIndex((score) => score === student.posttest) + 1 || 1;
+  const belowOrEqual = sortedPost.filter((score) => score <= student.posttest).length;
   const percentile =
     allStudents.length > 0 ? Math.round((belowOrEqual / allStudents.length) * 100) : 100;
 
-  const avgPrePct =
-    allStudents.length > 0
-      ? (allStudents.reduce((a, s) => a + s.pretest, 0) / allStudents.length / SCORE_MAX.pretest) *
-        100
-      : 50;
-  const avgUnit1Pct =
-    allStudents.length > 0
-      ? (allStudents.reduce((a, s) => a + s.unit1, 0) / allStudents.length / SCORE_MAX.unit1) * 100
-      : 80;
-  const avgUnit2Pct =
-    allStudents.length > 0
-      ? (allStudents.reduce((a, s) => a + s.unit2, 0) / allStudents.length / SCORE_MAX.unit2) * 100
-      : 80;
-  const avgUnit3Pct =
-    allStudents.length > 0
-      ? (allStudents.reduce((a, s) => a + s.unit3, 0) / allStudents.length / SCORE_MAX.unit3) * 100
-      : 80;
-  const avgPostPct =
-    allStudents.length > 0
-      ? (allStudents.reduce((a, s) => a + s.posttest, 0) /
-          allStudents.length /
-          SCORE_MAX.posttest) *
-        100
-      : 80;
-
-  const competencies = [
-    {
-      name: 'สอบก่อนเรียน (Pre-test)',
-      score: student.pretest,
-      maxScore: 20,
-      scorePct: Math.round((student.pretest / SCORE_MAX.pretest) * 100),
-      classAvgPct: Math.round(avgPrePct),
-      description: 'วัดความรู้พื้นฐานก่อนเริ่มเรียนด้วยนวัตกรรมทั้ง 3 แผน',
-    },
-    {
-      name: 'สอนแผนที่ 1: พันธุศาสตร์แสนสนุก',
-      score: student.unit1,
-      maxScore: 20,
-      scorePct: Math.round((student.unit1 / SCORE_MAX.unit1) * 100),
-      classAvgPct: Math.round(avgUnit1Pct),
-      description: 'กิจกรรมจำลองการจับคู่โครโมโซมและตารางพันเนตต์',
-    },
-    {
-      name: 'สอนแผนที่ 2: มหัศจรรย์คลื่นและแสง',
-      score: student.unit2,
-      maxScore: 20,
-      scorePct: Math.round((student.unit2 / SCORE_MAX.unit2) * 100),
-      classAvgPct: Math.round(avgUnit2Pct),
-      description: 'ปฏิบัติการทดลองเสมือนจริงเรื่องการสะท้อนและหักเหของแสง',
-    },
-    {
-      name: 'สอนแผนที่ 3: ตะลุยระบบสุริยะและอวกาศ',
-      score: student.unit3,
-      maxScore: 20,
-      scorePct: Math.round((student.unit3 / SCORE_MAX.unit3) * 100),
-      classAvgPct: Math.round(avgUnit3Pct),
-      description: 'สร้างแบบจำลองปรากฏการณ์ดาราศาสตร์และเทคโนโลยีอวกาศ',
-    },
-    {
-      name: 'สอบหลังเรียน (Post-test E2)',
-      score: student.posttest,
-      maxScore: 20,
-      scorePct: Math.round((student.posttest / SCORE_MAX.posttest) * 100),
-      classAvgPct: Math.round(avgPostPct),
-      description: 'วัดผลสัมฤทธิ์รวบยอดหลังเรียนครบทั้ง 3 แผนการจัดการเรียนรู้',
-    },
-  ];
-
-  const planCompetencies = competencies.slice(1, 4);
-  const strengths = planCompetencies
-    .filter((c) => c.scorePct >= 80)
-    .map((c) => `${c.name} (${c.score}/${c.maxScore} คะแนน)`);
-  const areasForImprovement = planCompetencies
-    .filter((c) => c.scorePct < 75)
-    .map((c) => `${c.name} (${c.score}/${c.maxScore} คะแนน)`);
-
   let statusTier: 'At-Risk' | 'On-Track' | 'High-Performing' = 'On-Track';
-  let statusTierThai = 'ผ่านเกณฑ์ตามแผน (On-Track)';
-  if (totalScore < 65 || student.researchTargetGroup || normalizedGain.gain < 0.35) {
+  let statusTierThai = 'ผ่านเกณฑ์มาตรฐาน (On-Track)';
+  if (posttestPct < 70 || student.researchTargetGroup || normalizedGain.gain < 0.35) {
     statusTier = 'At-Risk';
-    statusTierThai = 'กลุ่มเป้าหมายวิจัย / ต้องซ่อมเสริม (At-Risk)';
-  } else if (totalScore >= 80 && normalizedGain.gain >= 0.65) {
+    statusTierThai = 'กลุ่มเป้าหมายวิจัย / ต้องเสริมทักษะ (At-Risk)';
+  } else if (posttestPct >= 80 && normalizedGain.gain >= 0.65) {
     statusTier = 'High-Performing';
     statusTierThai = 'ดาวเด่นประจำชั้นเรียน (High-Performing)';
   }
 
-  const weakestPlan = [...planCompetencies].sort((a, b) => a.scorePct - b.scorePct)[0];
+  const strengths: string[] = [];
+  if (scoreDiff >= 7) {
+    strengths.push(`คะแนนสอบหลังเรียนก้าวกระโดดเพิ่มขึ้น +${scoreDiff} คะแนน (จาก ${student.pretest} เป็น ${student.posttest}/20)`);
+  } else if (scoreDiff > 0) {
+    strengths.push(`มีพัฒนาการเพิ่มขึ้นหลังเรียน +${scoreDiff} คะแนน (คิดเป็น +${pctDiff}%)`);
+  }
+  if (completedPlansCount === 3) {
+    strengths.push('เข้าร่วมกิจกรรมการเรียนรู้ครบถ้วนทั้ง 3 แผนการจัดการเรียนรู้');
+  }
+  if (normalizedGain.level === 'High Gain') {
+    strengths.push(`ดัชนีพัฒนาการสัมพัทธ์อยู่ในระดับสูง (g = ${normalizedGain.gain.toFixed(2)})`);
+  }
+
+  const areasForImprovement: string[] = [];
+  if (completedPlansCount < 3) {
+    const missing: string[] = [];
+    if (!student.completedPlan1) missing.push('แผนที่ 1');
+    if (!student.completedPlan2) missing.push('แผนที่ 2');
+    if (!student.completedPlan3) missing.push('แผนที่ 3');
+    areasForImprovement.push(`ยังไม่ได้เข้าร่วมกิจกรรมใน ${missing.join(', ')} ควรติดตามซ่อมเสริม`);
+  }
+  if (student.posttest < 16) {
+    areasForImprovement.push(
+      `คะแนนสอบหลังเรียน (${student.posttest}/20) ยังต่ำกว่าเกณฑ์ร้อยละ 80 (16/20 คะแนน)`
+    );
+  }
+  if (areasForImprovement.length === 0) {
+    areasForImprovement.push('รักษามาตรฐานและฝึกทำโจทย์วิเคราะห์ขั้นสูงเพื่อพิชิตคะแนนเต็ม 20/20');
+  }
+
   let recommendedIntervention =
-    'มอบหมายภารกิจหัวหน้าทีมนักวิทย์น้อย (Peer Mentor) ช่วยแนะนำเพื่อนในกิจกรรมกลุ่มทั้ง 3 แผน';
+    'มอบหมายให้เป็นเพื่อนช่วยสอน (Peer Mentor) ร่วมแลกเปลี่ยนเทคนิคการสรุปบทเรียนทั้ง 3 แผนให้เพื่อนในกลุ่ม';
   if (statusTier === 'At-Risk') {
-    recommendedIntervention = `จัดซ่อมเสริมนอกเวลาด้วยชุดการ์ตูนวิทย์อินเทอร์แอคทีฟ เน้นทบทวน "${weakestPlan.name}" ก่อนสอบวัดผลซ้ำ`;
+    recommendedIntervention =
+      'ทบทวนเนื้อหาจากชุดกิจกรรมการ์ตูนทั้ง 3 แผนควบคู่กับการทำแบบฝึกซ่อมเสริมรายบุคคล ก่อนทดสอบวัดผลหลังเรียนซ้ำ';
   } else if (statusTier === 'On-Track') {
-    recommendedIntervention = `เสริมแบบฝึกทักษะการ์ตูนสรุปมโนทัศน์ใน "${weakestPlan.name}" เพื่อยกระดับคะแนนสอบหลังเรียนสู่ระดับดีเยี่ยม`;
+    recommendedIntervention =
+      'เสริมใบงานสรุปผังมโนทัศน์เชื่อมโยงเนื้อหาทั้ง 3 แผน เพื่อยกระดับคะแนนสอบหลังเรียนให้ผ่านเกณฑ์ร้อยละ 80 (16/20)';
   }
 
   return {
     student,
-    totalScore,
-    formativeScore,
-    formativePct,
     pretestPct,
     posttestPct,
     scoreDiff,
+    pctDiff,
+    completedPlansCount,
     grade,
     gradeLabel,
     rank,
@@ -570,35 +457,26 @@ export function analyzeIndividualStudent(
     normalizedGain,
     statusTier,
     statusTierThai,
-    competencies,
-    strengths:
-      strengths.length > 0
-        ? strengths
-        : ['มีพัฒนาการคะแนนหลังเรียนสูงขึ้นเมื่อเทียบกับก่อนเรียน'],
-    areasForImprovement:
-      areasForImprovement.length > 0
-        ? areasForImprovement
-        : ['ควรฝึกโจทย์ประยุกต์เพิ่มเติมเพื่อความแม่นยำเต็ม 20 คะแนน'],
+    strengths,
+    areasForImprovement,
     recommendedIntervention,
   };
 }
 
-// Serialization for Google Sheets Sync (3-Plan Research Structure)
+// Serialization for Google Sheets Sync (No plan scores, no affective score)
 export const GRADEBOOK_SHEET_HEADERS = [
   'รหัสนักเรียน',
   'คำนำหน้า',
   'ชื่อ',
   'นามสกุล',
   'ห้องเรียน',
-  'เวลาเรียน(%)',
   'สอบก่อนเรียน(20)',
-  'แผนที่1(20)',
-  'แผนที่2(20)',
-  'แผนที่3(20)',
-  'รวม3แผน_E1(60)',
-  'สอบหลังเรียน_E2(20)',
-  'จิตพิสัย(20)',
-  'คะแนนรวม(100)',
+  'เรียนแผนที่1',
+  'เรียนแผนที่2',
+  'เรียนแผนที่3',
+  'สอบหลังเรียน(20)',
+  'ผลต่างคะแนน(+/-)',
+  'ร้อยละหลังเรียน(%)',
   'เกรด',
   'ค่าพัฒนาการ(g)',
   'กลุ่มเป้าหมายวิจัย',
@@ -609,9 +487,9 @@ export const GRADEBOOK_SHEET_HEADERS = [
 export function studentsToSheetRows(students: StudentRecord[]): (string | number)[][] {
   const rows: (string | number)[][] = [GRADEBOOK_SHEET_HEADERS];
   for (const s of students) {
-    const threePlans = calculateThreePlansScore(s);
-    const total = calculateTotalScore(s);
-    const grade = calculateThaiGrade(total);
+    const diff = calculateScoreDiff(s);
+    const postPct = calculatePosttestPct(s);
+    const grade = calculateThaiGrade(postPct);
     const gain = calculateNormalizedGain(s.pretest, s.posttest).gain;
     rows.push([
       s.studentCode,
@@ -619,15 +497,13 @@ export function studentsToSheetRows(students: StudentRecord[]): (string | number
       s.firstName,
       s.lastName,
       s.classroom,
-      s.attendanceRate,
       s.pretest,
-      s.unit1,
-      s.unit2,
-      s.unit3,
-      threePlans,
+      s.completedPlan1 ? 'เรียนแล้ว' : 'ยังไม่เรียน',
+      s.completedPlan2 ? 'เรียนแล้ว' : 'ยังไม่เรียน',
+      s.completedPlan3 ? 'เรียนแล้ว' : 'ยังไม่เรียน',
       s.posttest,
-      s.affective,
-      total,
+      diff,
+      postPct,
       grade,
       gain,
       s.researchTargetGroup ? 'ใช่' : 'ไม่ใช่',
@@ -644,11 +520,16 @@ export function sheetRowsToStudents(rows: any[][]): StudentRecord[] {
   return dataRows
     .filter((r) => r && r.length >= 4 && String(r[0] || '').trim() !== '')
     .map((r, idx) => {
-      const learningStyleRaw = String(r[17] || 'Visual');
+      const learningStyleRaw = String(r[15] || 'Visual');
       const validStyles = ['Visual', 'Kinesthetic', 'Analytical', 'Collaborative'] as const;
       const learningStyle = (validStyles.includes(learningStyleRaw as any)
         ? learningStyleRaw
         : 'Visual') as StudentRecord['learningStyle'];
+
+      const parsePlanDone = (val: any) => {
+        const str = String(val ?? 'เรียนแล้ว').trim().toLowerCase();
+        return str !== 'ยังไม่เรียน' && str !== 'false' && str !== '0';
+      };
 
       return {
         id: `stu-${String(r[0]).trim() || idx + 1}`,
@@ -657,65 +538,62 @@ export function sheetRowsToStudents(rows: any[][]): StudentRecord[] {
         firstName: String(r[2] || '').trim(),
         lastName: String(r[3] || '').trim(),
         classroom: String(r[4] || 'ม.3/1').trim(),
-        attendanceRate: clampScore(Number(r[5] ?? 95), 100),
-        pretest: clampScore(Number(r[6] ?? 0), SCORE_MAX.pretest),
-        unit1: clampScore(Number(r[7] ?? 0), SCORE_MAX.unit1),
-        unit2: clampScore(Number(r[8] ?? 0), SCORE_MAX.unit2),
-        unit3: clampScore(Number(r[9] ?? 0), SCORE_MAX.unit3),
-        posttest: clampScore(Number(r[11] ?? 0), SCORE_MAX.posttest),
-        affective: clampScore(Number(r[12] ?? 0), SCORE_MAX.affective),
+        pretest: clampScore(Number(r[5] ?? 0), SCORE_MAX.pretest),
+        completedPlan1: parsePlanDone(r[6]),
+        completedPlan2: parsePlanDone(r[7]),
+        completedPlan3: parsePlanDone(r[8]),
+        posttest: clampScore(Number(r[9] ?? 0), SCORE_MAX.posttest),
         researchTargetGroup:
-          String(r[16] || '').trim() === 'ใช่' ||
-          String(r[16] || '').toLowerCase() === 'true',
+          String(r[14] || '').trim() === 'ใช่' ||
+          String(r[14] || '').toLowerCase() === 'true',
         learningStyle,
-        teacherNote: String(r[18] || '').trim(),
+        teacherNote: String(r[16] || '').trim(),
       };
     });
 }
 
 export const INITIAL_RESEARCH_CONFIG: ResearchProjectConfig = {
   title:
-    'การพัฒนาผลสัมฤทธิ์ทางการเรียนวิทยาศาสตร์โดยใช้ชุดกิจกรรมการ์ตูนวิทย์เชิงรุก 3 แผนการจัดการเรียนรู้ ร่วมกับการวัดผลก่อนเรียนและหลังเรียน',
+    'การพัฒนาผลสัมฤทธิ์ทางการเรียนวิทยาศาสตร์โดยใช้การจัดการเรียนรู้ 3 แผน ร่วมกับการวัดผลสอบก่อนเรียน (20 คะแนน) และสอบหลังเรียน (20 คะแนน)',
   courseCode: 'ว23101',
   courseName: 'วิทยาศาสตร์พื้นฐาน 5',
   semester: 'ภาคเรียนที่ 1 / 2569',
   targetClassroom: 'ม.3/1',
   innovationName: 'ชุดกิจกรรมการ์ตูนวิทย์เชิงรุก 3 แผน (SciWIT Comic Lab)',
-  criterionE1: 80,
-  criterionE2: 80,
+  targetCriterionPct: 80,
   researchHypothesis:
-    '1) ประสิทธิภาพของชุดกิจกรรมการเรียนรู้ทั้ง 3 แผน (E1/E2) สูงกว่าเกณฑ์ 80/80 และ 2) คะแนนสอบหลังเรียน (20 คะแนน) สูงกว่าสอบก่อนเรียน (20 คะแนน) อย่างมีนัยสำคัญทางสถิติที่ระดับ .05',
+    '1) นักเรียนมีคะแนนสอบหลังเรียน (เต็ม 20 คะแนน) สูงกว่าก่อนเรียน (เต็ม 20 คะแนน) อย่างมีนัยสำคัญทางสถิติที่ระดับ .05 และ 2) นักเรียนมีคะแนนเฉลี่ยหลังเรียนผ่านเกณฑ์ร้อยละ 80 (16 คะแนนขึ้นไป)',
   lessonPlans: [
     {
       planNumber: 1,
       title: 'แผนการจัดการเรียนรู้ที่ 1: พันธุศาสตร์แสนสนุก',
-      activityName: 'ภารกิจถอดรหัสยีนด้วยการ์ตูนตารางพันเนตต์ (20 คะแนน)',
-      maxScore: 20,
-      targetSkill: 'การวิเคราะห์จีโนไทป์และฟีโนไทป์จากการ์ตูนสถานการณ์',
+      activityName: 'กิจกรรมการ์ตูนถอดรหัสยีนและตารางพันเนตต์ (ขั้นสอนแผนที่ 1)',
+      durationHours: 3,
+      targetSkill: 'เข้าใจหลักการถ่ายทอดลักษณะทางพันธุกรรม (ไม่เก็บคะแนนระหว่างแผน)',
     },
     {
       planNumber: 2,
       title: 'แผนการจัดการเรียนรู้ที่ 2: มหัศจรรย์คลื่นและแสง',
-      activityName: 'แล็บจำลองรังสีแสงและเลนส์หรรษา (20 คะแนน)',
-      maxScore: 20,
-      targetSkill: 'การเขียนแผนภาพรังสีของแสงและการคำนวณความถี่คลื่น',
+      activityName: 'ปฏิบัติการจำลองรังสีแสงและเลนส์หรรษา (ขั้นสอนแผนที่ 2)',
+      durationHours: 3,
+      targetSkill: 'อธิบายการสะท้อนและหักเหของแสงได้ถูกต้อง (ไม่เก็บคะแนนระหว่างแผน)',
     },
     {
       planNumber: 3,
       title: 'แผนการจัดการเรียนรู้ที่ 3: ตะลุยระบบสุริยะและอวกาศ',
-      activityName: 'บอร์ดเกมสำรวจจักรวาลและเทคโนโลยีอวกาศ (20 คะแนน)',
-      maxScore: 20,
-      targetSkill: 'การเชื่อมโยงปรากฏการณ์ดาราศาสตร์และการประยุกต์ใช้ดาวเทียม',
+      activityName: 'บอร์ดเกมสำรวจจักรวาลและเทคโนโลยีอวกาศ (ขั้นสอนแผนที่ 3)',
+      durationHours: 3,
+      targetSkill: 'เชื่อมโยงปรากฏการณ์ดาราศาสตร์และเทคโนโลยีอวกาศ (ไม่เก็บคะแนนระหว่างแผน)',
     },
   ],
   planSummary:
-    'ขั้นตอนที่ 1 (Plan): จัดสอบก่อนเรียน (Pre-test เต็ม 20 คะแนน) เพื่อวิเคราะห์พื้นฐานผู้เรียนรายบุคคล และออกแบบแผนการจัดการเรียนรู้เชิงรุก 3 แผน (แผนละ 20 คะแนน รวม 60 คะแนน)',
+    'ขั้นตอนที่ 1 (Plan): จัดสอบวัดความรู้ก่อนเรียน (Pre-test เต็ม 20 คะแนน) เพื่อคัดกรองผู้เรียนรายบุคคล และเตรียมแผนการจัดการเรียนรู้ทั้ง 3 แผน (โดยไม่เก็บคะแนนในแผนและไม่เก็บจิตพิสัย)',
   actSummary:
-    'ขั้นตอนที่ 2 (Act): ดำเนินการสอนตามแผนที่ 1, แผนที่ 2 และแผนที่ 3 ตามลำดับ พร้อมเก็บคะแนนใบงานและกิจกรรมระหว่างเรียนครบทั้ง 3 แผน',
+    'ขั้นตอนที่ 2 (Act): ดำเนินการจัดกิจกรรมการเรียนรู้ตามแผนที่ 1, แผนที่ 2 และแผนที่ 3 จนครบสมบูรณ์ เน้นให้นักเรียนทำกิจกรรมกลุ่มและเข้าใจมโนทัศน์หลักโดยไม่มีความกดดันเรื่องคะแนนเก็บรายแผน',
   observeSummary:
-    'ขั้นตอนที่ 3 (Observe): จัดสอบหลังเรียน (Post-test เต็ม 20 คะแนน) นำคะแนนทั้ง 3 แผนมาคำนวณค่า E1 และนำคะแนนสอบหลังเรียนมาคำนวณค่า E2',
+    'ขั้นตอนที่ 3 (Observe): เมื่อสอนครบทั้ง 3 แผนแล้ว จึงจัดสอบวัดผลหลังเรียน (Post-test เต็ม 20 คะแนน) เพื่อวัดผลสัมฤทธิ์ทางการเรียนรวบยอด',
   reflectSummary:
-    'ขั้นตอนที่ 4 (Reflect): เปรียบเทียบคะแนนสอบก่อนเรียน (20) กับหลังเรียน (20) ด้วยสถิติ Paired t-test และค่า Normalized Gain (g) เพื่อสะท้อนผลการพัฒนารายบุคคล',
+    'ขั้นตอนที่ 4 (Reflect): นำคะแนนสอบก่อนเรียน (20 คะแนน) และสอบหลังเรียน (20 คะแนน) มาวิเคราะห์ผลต่าง (Gain Score), ค่าพัฒนาการสัมพัทธ์ (Normalized Gain g) และสถิติ Paired t-test รายบุคคล',
 };
 
 export const INITIAL_STUDENTS: StudentRecord[] = [
@@ -726,16 +604,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'กิตติภพ',
     lastName: 'รัตนโชติ',
     classroom: 'ม.3/1',
-    attendanceRate: 98,
     pretest: 11,
-    unit1: 18,
-    unit2: 17.5,
-    unit3: 18.5,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 18.5,
-    affective: 19,
     learningStyle: 'Analytical',
     researchTargetGroup: false,
-    teacherNote: 'ทำกิจกรรมทั้ง 3 แผนได้ยอดเยี่ยม คะแนนสอบหลังเรียนพุ่งจาก 11 เป็น 18.5/20',
+    teacherNote: 'เข้าเรียนครบทั้ง 3 แผน คะแนนสอบหลังเรียนพุ่งจาก 11/20 เป็น 18.5/20 (+7.5 คะแนน)',
   },
   {
     id: 'stu-30102',
@@ -744,16 +620,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'ชนิกานต์',
     lastName: 'วงศ์สวัสดิ์',
     classroom: 'ม.3/1',
-    attendanceRate: 100,
     pretest: 12,
-    unit1: 19,
-    unit2: 18.5,
-    unit3: 19,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 19,
-    affective: 20,
     learningStyle: 'Visual',
     researchTargetGroup: false,
-    teacherNote: 'วาดผังมโนทัศน์การ์ตูนในแผนที่ 1 และ 3 ได้สวยงามและแม่นยำมาก',
+    teacherNote: 'ร่วมกิจกรรมครบทั้ง 3 แผน สอบหลังเรียนได้ 19/20 (95%) พัฒนาการดีเยี่ยม',
   },
   {
     id: 'stu-30103',
@@ -762,16 +636,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'ณัฐภัทร',
     lastName: 'ศรีสุวรรณ',
     classroom: 'ม.3/1',
-    attendanceRate: 90,
     pretest: 7,
-    unit1: 14.5,
-    unit2: 13.5,
-    unit3: 15,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 15,
-    affective: 17,
     learningStyle: 'Kinesthetic',
     researchTargetGroup: true,
-    teacherNote: 'กลุ่มเป้าหมายวิจัย: ก่อนเรียนได้ 7/20 หลังเรียนครบ 3 แผนได้ 15/20 พัฒนาขึ้นเกินเท่าตัว!',
+    teacherNote: 'กลุ่มเป้าหมายวิจัย: ก่อนเรียนได้ 7/20 หลังเรียนครบ 3 แผนสอบได้ 15/20 เพิ่มขึ้น +8 คะแนน!',
   },
   {
     id: 'stu-30104',
@@ -780,16 +652,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'ธนัชชา',
     lastName: 'เจริญผล',
     classroom: 'ม.3/1',
-    attendanceRate: 96,
     pretest: 10,
-    unit1: 17,
-    unit2: 16.5,
-    unit3: 17.5,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 17,
-    affective: 19,
     learningStyle: 'Collaborative',
     researchTargetGroup: false,
-    teacherNote: 'ให้ความร่วมมือในบอร์ดเกมแผนที่ 3 ดีมาก คะแนนพัฒนาขึ้นสม่ำเสมอ',
+    teacherNote: 'เรียนครบ 3 แผน คะแนนสอบจาก 10/20 เพิ่มเป็น 17/20 (85%)',
   },
   {
     id: 'stu-30105',
@@ -798,16 +668,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'ปุณณวิช',
     lastName: 'อินทร์จันทร์',
     classroom: 'ม.3/1',
-    attendanceRate: 86,
     pretest: 6,
-    unit1: 13.5,
-    unit2: 13,
-    unit3: 14,
-    posttest: 13.5,
-    affective: 16,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
+    posttest: 14,
     learningStyle: 'Visual',
     researchTargetGroup: true,
-    teacherNote: 'กลุ่มเป้าหมายวิจัย: ใช้สื่อการ์ตูนช่วยจำในแผนที่ 1 และ 2 ทำให้คะแนนสอบหลังเรียนเพิ่มขึ้น +7.5 คะแนน',
+    teacherNote: 'กลุ่มเป้าหมายวิจัย: ก่อนเรียนได้ 6/20 หลังเรียนครบ 3 แผนได้ 14/20 (+8 คะแนน)',
   },
   {
     id: 'stu-30106',
@@ -816,16 +684,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'พิมพ์ชนก',
     lastName: 'เกียรติขจร',
     classroom: 'ม.3/1',
-    attendanceRate: 95,
     pretest: 9.5,
-    unit1: 16.5,
-    unit2: 16,
-    unit3: 17,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 16.5,
-    affective: 18.5,
     learningStyle: 'Collaborative',
     researchTargetGroup: false,
-    teacherNote: 'ตั้งคำถามและสรุปบทเรียนท้ายแผนที่ 2 และ 3 ได้ชัดเจน',
+    teacherNote: 'มีส่วนร่วมในกิจกรรมทั้ง 3 แผนดีมาก สอบหลังเรียนได้ 16.5/20',
   },
   {
     id: 'stu-30107',
@@ -834,16 +700,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'ศุภกร',
     lastName: 'ตั้งจิตต์',
     classroom: 'ม.3/1',
-    attendanceRate: 88,
     pretest: 6.5,
-    unit1: 14,
-    unit2: 12.5,
-    unit3: 14,
-    posttest: 13,
-    affective: 16.5,
+    completedPlan1: true,
+    completedPlan2: false,
+    completedPlan3: true,
+    posttest: 13.5,
     learningStyle: 'Kinesthetic',
     researchTargetGroup: true,
-    teacherNote: 'กลุ่มเป้าหมายวิจัย: ชอบกิจกรรมการทดลองในแผนที่ 2 แต่ยังต้องทบทวนสูตรคำนวณเพิ่มเติม',
+    teacherNote: 'กลุ่มเป้าหมายวิจัย: ขาดเรียนแผนที่ 2 กำลังติดตามซ่อมเสริมกิจกรรมเรื่องคลื่นและแสง',
   },
   {
     id: 'stu-30108',
@@ -852,16 +716,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'อภิชญา',
     lastName: 'เลิศปัญญา',
     classroom: 'ม.3/1',
-    attendanceRate: 100,
     pretest: 13,
-    unit1: 19.5,
-    unit2: 19,
-    unit3: 19.5,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 19.5,
-    affective: 20,
     learningStyle: 'Analytical',
     researchTargetGroup: false,
-    teacherNote: 'คะแนนสูงสุดทั้ง 3 แผนการเรียนรู้ และสอบหลังเรียนได้เกือบเต็ม 20 คะแนน',
+    teacherNote: 'คะแนนสอบหลังเรียนสูงสุดของห้อง 19.5/20 (97.5%)',
   },
   {
     id: 'stu-30109',
@@ -870,16 +732,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'อชิรวิทย์',
     lastName: 'ทองดี',
     classroom: 'ม.3/1',
-    attendanceRate: 92,
     pretest: 8,
-    unit1: 15.5,
-    unit2: 15,
-    unit3: 16,
-    posttest: 15.5,
-    affective: 18,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
+    posttest: 16,
     learningStyle: 'Visual',
     researchTargetGroup: true,
-    teacherNote: 'กลุ่มเป้าหมายวิจัย: พัฒนาการโดดเด่นหลังเรียนครบ 3 แผน คะแนนรวมทะลุ 80 คะแนน (เกรด 4.0)',
+    teacherNote: 'กลุ่มเป้าหมายวิจัย: ก่อนเรียนได้ 8/20 หลังเรียนครบ 3 แผนได้ 16/20 (80% ผ่านเกณฑ์ดีเยี่ยม)',
   },
   {
     id: 'stu-30110',
@@ -888,16 +748,14 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
     firstName: 'เขมจิรา',
     lastName: 'นันทวงศ์',
     classroom: 'ม.3/1',
-    attendanceRate: 97,
     pretest: 10.5,
-    unit1: 17.5,
-    unit2: 17,
-    unit3: 18,
+    completedPlan1: true,
+    completedPlan2: true,
+    completedPlan3: true,
     posttest: 17.5,
-    affective: 19,
     learningStyle: 'Analytical',
     researchTargetGroup: false,
-    teacherNote: 'ส่งใบงานครบทั้ง 3 แผน คะแนนสอบหลังเรียน 17.5/20 อยู่ในเกณฑ์ดีเยี่ยม',
+    teacherNote: 'เรียนครบทั้ง 3 แผน สอบหลังเรียนได้ 17.5/20 (87.5%)',
   },
 ];
 
@@ -909,11 +767,11 @@ export const INITIAL_INTERVENTIONS: ResearchIntervention[] = [
     studentName: 'ด.ช. อชิรวิทย์ ทองดี',
     paorStage: 'Act',
     lessonPlanNumber: 1,
-    innovationUsed: 'การ์ตูนตารางพันเนตต์จำลองสี (แผนที่ 1)',
+    innovationUsed: 'กิจกรรมการ์ตูนตารางพันเนตต์จำลองสี (สอนแผนที่ 1)',
     problemObserved: 'สอบก่อนเรียนได้ 8/20 เพราะสับสนการจับคู่ยีนเด่น-ยีนด้อย',
     scoreBefore: 8,
-    scoreAfter: 15.5,
-    reflectionOutcome: 'หลังเรียนแผนที่ 1 ได้ 15.5/20 และสอบหลังเรียนได้ 15.5/20 (g = 0.63)',
+    scoreAfter: 16,
+    reflectionOutcome: 'หลังเรียนครบ 3 แผน สอบหลังเรียนได้ 16/20 เพิ่มขึ้น +8 คะแนน (g = 0.67)',
     status: 'บรรลุเป้าหมาย',
   },
   {
@@ -923,7 +781,7 @@ export const INITIAL_INTERVENTIONS: ResearchIntervention[] = [
     studentName: 'ด.ช. ณัฐภัทร ศรีสุวรรณ',
     paorStage: 'Observe',
     lessonPlanNumber: 2,
-    innovationUsed: 'แล็บการ์ตูนจำลองการหักเหของแสง (แผนที่ 2)',
+    innovationUsed: 'แล็บการ์ตูนจำลองการหักเหของแสง (สอนแผนที่ 2)',
     problemObserved: 'สอบก่อนเรียนได้ 7/20 ไม่เข้าใจทิศทางรังสีของแสงเมื่อผ่านเลนส์',
     scoreBefore: 7,
     scoreAfter: 15,
@@ -937,12 +795,12 @@ export const INITIAL_INTERVENTIONS: ResearchIntervention[] = [
     studentName: 'ด.ช. ปุณณวิช อินทร์จันทร์',
     paorStage: 'Reflect',
     lessonPlanNumber: 3,
-    innovationUsed: 'บอร์ดเกมสำรวจระบบสุริยะคู่ขนานเพื่อนช่วยเพื่อน (แผนที่ 3)',
+    innovationUsed: 'บอร์ดเกมสำรวจระบบสุริยะคู่ขนานเพื่อนช่วยเพื่อน (สอนแผนที่ 3)',
     problemObserved: 'สอบก่อนเรียนได้ 6/20 ขาดความมั่นใจในการเชื่อมโยงเนื้อหา',
     scoreBefore: 6,
-    scoreAfter: 13.5,
-    reflectionOutcome: 'คะแนนแผนที่ 3 ได้ 14/20 และสอบหลังเรียนเพิ่มเป็น 13.5/20',
-    status: 'กำลังดำเนินการ',
+    scoreAfter: 14,
+    reflectionOutcome: 'เรียนครบทั้ง 3 แผนแล้ว สอบหลังเรียนเพิ่มเป็น 14/20 (+8 คะแนน)',
+    status: 'บรรลุเป้าหมาย',
   },
   {
     id: 'int-104',
@@ -951,11 +809,11 @@ export const INITIAL_INTERVENTIONS: ResearchIntervention[] = [
     studentName: 'ด.ช. ศุภกร ตั้งจิตต์',
     paorStage: 'Plan',
     lessonPlanNumber: 2,
-    innovationUsed: 'ชุดฝึกการ์ตูนแก้โจทย์คลื่นทีละขั้น (แผนที่ 2)',
-    problemObserved: 'สอบก่อนเรียนได้ 6.5/20 และคะแนนแผนที่ 2 ได้ 12.5/20',
+    innovationUsed: 'ชุดฝึกการ์ตูนซ่อมเสริมนอกเวลา (สอนแผนที่ 2)',
+    problemObserved: 'สอบก่อนเรียนได้ 6.5/20 และขาดเรียนในคาบแผนที่ 2',
     scoreBefore: 6.5,
-    scoreAfter: 13,
-    reflectionOutcome: 'สอบหลังเรียนเพิ่มเป็น 13/20 กำลังเสริมทักษะการแทนค่าสมการเพิ่มเติม',
-    status: 'ต้องปรับแผนซ้ำ',
+    scoreAfter: 13.5,
+    reflectionOutcome: 'สอบหลังเรียนเพิ่มเป็น 13.5/20 กำลังนัดหมายซ่อมเสริมกิจกรรมแผนที่ 2 ให้ครบ',
+    status: 'กำลังดำเนินการ',
   },
 ];

@@ -16,9 +16,9 @@ import { ActionResearchView } from './components/ActionResearchView';
 import { GoogleSheetsSyncView } from './components/GoogleSheetsSyncView';
 
 const STORAGE_KEYS = {
-  STUDENTS: 'sciwit_car_students_v2_3plan',
-  INTERVENTIONS: 'sciwit_car_interventions_v2_3plan',
-  CONFIG: 'sciwit_car_config_v2_3plan',
+  STUDENTS: 'sciwit_car_students_v3_prepost20',
+  INTERVENTIONS: 'sciwit_car_interventions_v3_prepost20',
+  CONFIG: 'sciwit_car_config_v3_prepost20',
 };
 
 export default function App() {
@@ -31,7 +31,9 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.STUDENTS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && 'completedPlan1' in parsed[0]) {
+          return parsed;
+        }
       }
     } catch {
       // ignore storage error
@@ -57,7 +59,7 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.lessonPlans)) return parsed;
+        if (parsed && typeof parsed.targetCriterionPct === 'number') return parsed;
       }
     } catch {
       // ignore storage error
@@ -112,12 +114,8 @@ export default function App() {
   }, [researchConfig]);
 
   const classStats = useMemo(() => {
-    return calculateClassSummary(
-      students,
-      researchConfig.criterionE1,
-      researchConfig.criterionE2
-    );
-  }, [students, researchConfig.criterionE1, researchConfig.criterionE2]);
+    return calculateClassSummary(students, researchConfig.targetCriterionPct);
+  }, [students, researchConfig.targetCriterionPct]);
 
   const handleUpdateStudent = (updated: StudentRecord) => {
     setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
@@ -196,7 +194,7 @@ export default function App() {
                   : 'hover:text-slate-900'
               }`}
             >
-              บันทึกคะแนน 3 แผน
+              บันทึกคะแนน
             </a>
             <a
               href="#research"
@@ -296,7 +294,7 @@ export default function App() {
       <footer className="bg-white border-t-2 border-slate-900 px-4 sm:px-8 py-4 mt-12">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-bold text-slate-700">
           <span>
-            SciWIT Cartoon Lab · ระบบวิจัยในชั้นเรียน 3 แผนการเรียนรู้ (ก่อนเรียน 20 · สอน 3 แผน · หลังเรียน 20)
+            SciWIT Cartoon Lab · วิจัยในชั้นเรียน (สอบก่อนเรียน 20 คะแนน → สอน 3 แผน ไม่เก็บคะแนน → สอบหลังเรียน 20 คะแนน)
           </span>
           <span>
             รายวิชา {researchConfig.courseCode} {researchConfig.courseName} · นักเรียนทั้งหมด{' '}

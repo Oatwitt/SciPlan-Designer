@@ -13,7 +13,7 @@ import {
   ResearchProjectConfig,
   ClassSummaryStats,
   calculateNormalizedGain,
-  calculateTotalScore,
+  calculatePosttestPct,
 } from '../utils/analytics';
 
 interface ActionResearchViewProps {
@@ -62,7 +62,7 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
   }, [students]);
 
   const targetStudents = useMemo(() => {
-    return students.filter((s) => s.researchTargetGroup || calculateTotalScore(s) < 65);
+    return students.filter((s) => s.researchTargetGroup || calculatePosttestPct(s) < 70);
   }, [students]);
 
   const filteredInterventions = useMemo(() => {
@@ -70,11 +70,10 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
     return interventions.filter((item) => item.paorStage === stageFilter);
   }, [interventions, stageFilter]);
 
-  const handleCriterionPreset = (c1: number, c2: number) => {
+  const handleCriterionPreset = (pct: number) => {
     onUpdateConfig({
       ...researchConfig,
-      criterionE1: c1,
-      criterionE2: c2,
+      targetCriterionPct: pct,
     });
   };
 
@@ -122,21 +121,10 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
   };
 
   const planColors = ['bg-[#bae6fd]', 'bg-[#bbf7d0]', 'bg-[#e9d5ff]'];
-  const planPcts = [
-    classStats.e1e2.plan1Pct,
-    classStats.e1e2.plan2Pct,
-    classStats.e1e2.plan3Pct,
-  ];
-  const planMeanScores = [
-    students.length > 0
-      ? (students.reduce((a, s) => a + s.unit1, 0) / students.length).toFixed(1)
-      : '0.0',
-    students.length > 0
-      ? (students.reduce((a, s) => a + s.unit2, 0) / students.length).toFixed(1)
-      : '0.0',
-    students.length > 0
-      ? (students.reduce((a, s) => a + s.unit3, 0) / students.length).toFixed(1)
-      : '0.0',
+  const planAttendancePcts = [
+    classStats.plan1AttendancePct,
+    classStats.plan2AttendancePct,
+    classStats.plan3AttendancePct,
   ];
 
   return (
@@ -145,36 +133,29 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
       <div className="cartoon-card bg-[#e9d5ff] p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <p className="text-xs font-bold text-slate-700">
-            ระบบวิจัยปฏิบัติการในชั้นเรียนแบบ 3 แผนการเรียนรู้ · รหัสวิชา {researchConfig.courseCode}
+            ระบบวิจัยปฏิบัติการในชั้นเรียนแบบ One-Group Pretest-Posttest Design · รหัสวิชา {researchConfig.courseCode}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
-            วิเคราะห์วิจัย 3 แผน: สอบก่อนเรียน (20) → สอนแผน 1, 2, 3 → สอบหลังเรียน (20)
+            วิจัย 3 แผน: สอบก่อนเรียน (20 คะแนน) → สอนแผนที่ 1, 2, 3 → สอบหลังเรียน (20 คะแนน)
           </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1 p-1 bg-white border-2 border-slate-900 rounded-xl">
-            {(
-              [
-                [80, 80],
-                [75, 75],
-                [70, 70],
-              ] as const
-            ).map(([c1, c2]) => {
-              const active =
-                researchConfig.criterionE1 === c1 && researchConfig.criterionE2 === c2;
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-white border-2 border-slate-900 rounded-xl">
+            {([80, 75, 70] as const).map((pct) => {
+              const active = researchConfig.targetCriterionPct === pct;
               return (
                 <button
-                  key={`${c1}/${c2}`}
+                  key={pct}
                   type="button"
-                  onClick={() => handleCriterionPreset(c1, c2)}
-                  className={`px-2.5 py-1 text-xs font-mono font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+                  onClick={() => handleCriterionPreset(pct)}
+                  className={`px-2 py-1 text-xs font-mono font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
                     active
                       ? 'bg-[#fef08a] text-slate-900 border border-slate-900'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  เกณฑ์ {c1}/{c2}
+                  เกณฑ์ {pct}% ({(pct / 100) * 20}/20)
                 </button>
               );
             })}
@@ -191,7 +172,7 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
         </div>
       </div>
 
-      {/* Research Title & 3 Lesson Plans Visual Deck */}
+      {/* Research Title & 3 Unscored Lesson Plans Visual Deck */}
       <section
         aria-label="ข้อมูลโครงการวิจัยและแผนการจัดการเรียนรู้ทั้ง 3 แผน"
         className="cartoon-card p-6 space-y-6 bg-white"
@@ -233,15 +214,15 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
           </div>
         </div>
 
-        {/* 3 Lesson Plans Interactive Breakdown Cards */}
+        {/* 3 Unscored Lesson Plans Cards */}
         <div className="pt-4 border-t-2 border-dashed border-slate-200 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
-              <span>โครงสร้างการสอนทั้ง 3 แผนการจัดการเรียนรู้ (รวม 60 คะแนน → คำนวณค่า E1)</span>
+              <span>ขั้นตอนการสอนทั้ง 3 แผนการจัดการเรียนรู้ (เน้นกิจกรรม ไม่เก็บคะแนนในแผน และไม่เก็บจิตพิสัย)</span>
             </h2>
-            <span className="text-xs font-mono font-bold text-slate-700">
-              E1 เฉลี่ยรวม 3 แผน = {classStats.e1e2.e1.toFixed(2)}%
+            <span className="text-xs font-bold text-slate-700">
+              วัดผลสัมฤทธิ์จากสอบก่อนเรียน (20) และสอบหลังเรียน (20)
             </span>
           </div>
 
@@ -253,10 +234,10 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono font-bold text-slate-900 bg-white px-2 py-0.5 border border-slate-900 rounded-md">
-                    แผนที่ {plan.planNumber} (เต็ม 20 คะแนน)
+                    ขั้นสอนแผนที่ {plan.planNumber} ({plan.durationHours || 3} ชั่วโมง)
                   </span>
-                  <span className="text-sm font-mono font-bold tabular-nums text-slate-900">
-                    เฉลี่ย {planMeanScores[idx]}/20 ({planPcts[idx]}%)
+                  <span className="text-xs font-mono font-bold tabular-nums text-slate-900">
+                    เข้าเรียน {planAttendancePcts[idx]}%
                   </span>
                 </div>
 
@@ -269,10 +250,10 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
                 />
 
                 <div className="text-xs text-slate-800">
-                  <strong>กิจกรรม:</strong> {plan.activityName}
+                  <strong>กิจกรรมการเรียนรู้:</strong> {plan.activityName}
                 </div>
                 <div className="text-[11px] text-slate-700">
-                  <strong>ทักษะเป้าหมาย:</strong> {plan.targetSkill}
+                  <strong>จุดเน้น:</strong> {plan.targetSkill}
                 </div>
               </div>
             ))}
@@ -280,60 +261,60 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
         </div>
       </section>
 
-      {/* 3-Column Statistical Proof Deck: E1/E2, Dependent t-test, Normalized Gain */}
+      {/* 3-Column Statistical Proof Deck: Pre vs Post Score, Dependent t-test, Normalized Gain */}
       <section
         aria-label="ผลการวิเคราะห์สถิติวิจัยในชั้นเรียน"
         className="grid grid-cols-1 lg:grid-cols-3 gap-6"
       >
-        {/* Card 1: E1 / E2 Efficiency */}
+        {/* Card 1: Post-test Target Criterion Evaluation */}
         <div className="cartoon-card p-6 space-y-4 bg-white">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900">
-              1. ประสิทธิภาพนวัตกรรม 3 แผน (E1 / E2)
+              1. ผลสัมฤทธิ์หลังเรียนเทียบเกณฑ์ร้อยละ {classStats.targetCriterionPct}
             </h2>
             <FlaskConical className="w-5 h-5 text-slate-700" />
           </div>
 
           <div className="flex items-baseline justify-between pt-1">
             <div>
-              <div className="text-xs font-bold text-slate-500">ผลลัพธ์ E1 / E2 ที่คำนวณได้</div>
+              <div className="text-xs font-bold text-slate-500">คะแนนหลังเรียนเฉลี่ย</div>
               <div className="text-3xl font-bold font-mono tabular-nums text-slate-900 mt-1">
-                {classStats.e1e2.e1.toFixed(2)} / {classStats.e1e2.e2.toFixed(2)}
+                {classStats.meanPostScore.toFixed(2)} <span className="text-base">/ 20</span>
               </div>
             </div>
             <div className="text-right font-mono tabular-nums">
-              <div className="text-xs font-bold text-slate-500">เกณฑ์มาตรฐาน</div>
-              <div className="text-lg font-bold text-slate-800 mt-1">
-                {classStats.e1e2.criterionE1} / {classStats.e1e2.criterionE2}
+              <div className="text-xs font-bold text-slate-500">คิดเป็นร้อยละ</div>
+              <div className="text-2xl font-bold text-emerald-700 mt-1">
+                {classStats.meanPostPct.toFixed(1)}%
               </div>
             </div>
           </div>
 
           <div className="space-y-2 pt-2 border-t-2 border-dashed border-slate-200 text-xs">
             <div className="flex justify-between tabular-nums">
-              <span className="text-slate-700 font-medium">E1 (รวม 3 แผน เต็ม 60 คะแนน):</span>
+              <span className="text-slate-700 font-medium">เกณฑ์มาตรฐานที่ตั้งไว้:</span>
               <span className="font-mono font-bold text-slate-900">
-                {classStats.e1e2.e1.toFixed(2)}% ({classStats.e1e2.meetsE1 ? 'ผ่านเกณฑ์' : 'ต่ำกว่าเกณฑ์'})
+                ร้อยละ {classStats.targetCriterionPct} ({classStats.targetCriterionScore}/20 คะแนน)
               </span>
             </div>
             <div className="flex justify-between tabular-nums">
-              <span className="text-slate-700 font-medium">E2 (สอบหลังเรียน เต็ม 20 คะแนน):</span>
+              <span className="text-slate-700 font-medium">จำนวนนักเรียนที่ผ่านเกณฑ์:</span>
               <span className="font-mono font-bold text-slate-900">
-                {classStats.e1e2.e2.toFixed(2)}% ({classStats.e1e2.meetsE2 ? 'ผ่านเกณฑ์' : 'ต่ำกว่าเกณฑ์'})
+                {classStats.passCriterionCount} จาก {classStats.studentCount} คน ({classStats.passCriterionRate}%)
               </span>
             </div>
           </div>
 
           <div className="pt-2 text-xs">
-            {classStats.e1e2.meetsBoth ? (
+            {classStats.meanPostPct >= classStats.targetCriterionPct ? (
               <span className="text-emerald-700 font-bold flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>สรุปผล: นวัตกรรมทั้ง 3 แผนมีประสิทธิภาพสูงกว่าเกณฑ์</span>
+                <span>สรุปผล: คะแนนสอบหลังเรียนเฉลี่ยสูงกว่าเกณฑ์ร้อยละ {classStats.targetCriterionPct}</span>
               </span>
             ) : (
               <span className="text-amber-700 font-bold flex items-center gap-1.5">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>สรุปผล: ควรซ่อมเสริมแผนการเรียนรู้ที่ยังต่ำกว่าเกณฑ์</span>
+                <span>สรุปผล: คะแนนเฉลี่ยยังต่ำกว่าเกณฑ์ร้อยละ {classStats.targetCriterionPct}</span>
               </span>
             )}
           </div>
@@ -343,7 +324,7 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
         <div className="cartoon-card p-6 space-y-4 bg-white">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900">
-              2. สอบก่อนเรียน vs หลังเรียน (เต็ม 20)
+              2. สอบก่อนเรียน vs หลังเรียน (Paired t-test)
             </h2>
             <span className="text-xs font-mono font-bold text-slate-600">
               df = {classStats.tTest.df}
@@ -452,27 +433,27 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
           {(
             [
               {
-                step: '01. Plan (สอบก่อนเรียน & วางแผน 3 แผน)',
+                step: '01. Plan (สอบก่อนเรียน 20 & เตรียม 3 แผน)',
                 field: 'planSummary',
-                desc: 'จัดสอบก่อนเรียน (20 คะแนน) และออกแบบแผนการเรียนรู้ 3 แผน',
+                desc: 'จัดสอบก่อนเรียน (20 คะแนน) และเตรียมแผนการเรียนรู้ 3 แผน',
                 bg: 'bg-[#fef9c3]',
               },
               {
                 step: '02. Act (สอนแผนที่ 1, 2 และ 3)',
                 field: 'actSummary',
-                desc: 'ดำเนินการจัดกิจกรรมการเรียนรู้และเก็บคะแนนแผนละ 20 คะแนน',
+                desc: 'ดำเนินการสอนทั้ง 3 แผนโดยไม่เก็บคะแนนระหว่างแผนและไม่เก็บจิตพิสัย',
                 bg: 'bg-[#bae6fd]',
               },
               {
                 step: '03. Observe (สอบหลังเรียน 20 คะแนน)',
                 field: 'observeSummary',
-                desc: 'วัดผลหลังเรียน (20 คะแนน) และคำนวณประสิทธิภาพ E1/E2',
+                desc: 'จัดสอบวัดผลหลังเรียน (20 คะแนน) หลังสอนครบทั้ง 3 แผน',
                 bg: 'bg-[#bbf7d0]',
               },
               {
-                step: '04. Reflect (สะท้อนผลรายบุคคล)',
+                step: '04. Reflect (สะท้อนผลพัฒนาการ)',
                 field: 'reflectSummary',
-                desc: 'วิเคราะห์ค่า t-test และ Normalized Gain เพื่อพัฒนาต่อยอด',
+                desc: 'วิเคราะห์ผลต่างคะแนน, ค่า t-test และ Normalized Gain รายบุคคล',
                 bg: 'bg-[#e9d5ff]',
               },
             ] as const
@@ -508,10 +489,10 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              สมุดบันทึกการซ่อมเสริมผู้เรียนรายบุคคลตามแผนการเรียนรู้ (แผนที่ 1 - 3)
+              สมุดบันทึกการสอนและซ่อมเสริมผู้เรียนรายบุคคล (แผนที่ 1 - 3)
             </h2>
             <p className="text-xs text-slate-600 mt-0.5">
-              ติดตามผลการใช้นวัตกรรมการ์ตูนวิทย์แก้ปัญหาการเรียนรู้รายกรณี
+              ติดตามผลการใช้นวัตกรรมการ์ตูนวิทย์เปรียบเทียบก่อนเรียน (20) และหลังเรียน (20)
             </p>
           </div>
 
@@ -582,7 +563,7 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
 
               <div>
                 <label htmlFor="car-plan-select" className="block text-xs font-bold text-slate-700 mb-1">
-                  แผนการจัดการเรียนรู้
+                  แผนการจัดการเรียนรู้ที่ใช้
                 </label>
                 <select
                   id="car-plan-select"
@@ -590,9 +571,9 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
                   onChange={(e) => setLessonPlanNumber(Number(e.target.value) as 1 | 2 | 3)}
                   className="w-full px-3 py-1.5 text-xs font-bold bg-white border-2 border-slate-900 rounded-lg"
                 >
-                  <option value={1}>แผนที่ 1: พันธุศาสตร์ (20 คะแนน)</option>
-                  <option value={2}>แผนที่ 2: คลื่นและแสง (20 คะแนน)</option>
-                  <option value={3}>แผนที่ 3: ระบบสุริยะ (20 คะแนน)</option>
+                  <option value={1}>สอนแผนที่ 1: พันธุศาสตร์</option>
+                  <option value={2}>สอนแผนที่ 2: คลื่นและแสง</option>
+                  <option value={3}>สอนแผนที่ 3: ระบบสุริยะ</option>
                 </select>
               </div>
 
@@ -637,7 +618,7 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label htmlFor="car-innovation-input" className="block text-xs font-bold text-slate-700 mb-1">
-                  สื่อนวัตกรรมที่ใช้ *
+                  กิจกรรมการสอนที่ใช้ *
                 </label>
                 <input
                   id="car-innovation-input"
@@ -702,10 +683,10 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
             <thead>
               <tr className="border-b-2 border-slate-900 text-[11px] font-bold text-slate-700 bg-slate-50">
                 <th className="py-2.5 px-3 whitespace-nowrap">วันที่</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">แผนที่</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">ขั้นสอน</th>
                 <th className="py-2.5 px-3 whitespace-nowrap">ระยะ PAOR</th>
                 <th className="py-2.5 px-3 whitespace-nowrap">ผู้เรียนกลุ่มเป้าหมาย</th>
-                <th className="py-2.5 px-3">ปัญหาที่พบ &amp; สื่อนวัตกรรมที่ใช้</th>
+                <th className="py-2.5 px-3">ปัญหาที่พบ &amp; กิจกรรมการสอนที่ใช้</th>
                 <th className="py-2.5 px-3 text-right whitespace-nowrap">ก่อน → หลัง (20)</th>
                 <th className="py-2.5 px-3">ผลการสะท้อนคิด (Reflection)</th>
                 <th className="py-2.5 px-3 whitespace-nowrap">สถานะ</th>
@@ -718,7 +699,7 @@ export const ActionResearchView: React.FC<ActionResearchViewProps> = ({
                     {item.date}
                   </td>
                   <td className="py-3 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
-                    แผนที่ {item.lessonPlanNumber || 1}
+                    สอนแผนที่ {item.lessonPlanNumber || 1}
                   </td>
                   <td className="py-3 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
                     {item.paorStage}

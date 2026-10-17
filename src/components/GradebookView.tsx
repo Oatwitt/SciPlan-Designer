@@ -10,8 +10,8 @@ import {
 import {
   StudentRecord,
   SCORE_MAX,
-  calculateTotalScore,
-  calculateThreePlansScore,
+  calculatePosttestPct,
+  calculateScoreDiff,
   calculateThaiGrade,
   calculateNormalizedGain,
   clampScore,
@@ -63,13 +63,24 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
 
   const handleScoreCellChange = (
     student: StudentRecord,
-    field: 'pretest' | 'unit1' | 'unit2' | 'unit3' | 'posttest' | 'affective',
+    field: 'pretest' | 'posttest',
     rawVal: string
   ) => {
     const clamped = clampScore(Number(rawVal), SCORE_MAX[field]);
     onUpdateStudent({
       ...student,
       [field]: clamped,
+    });
+  };
+
+  const handlePlanCheckChange = (
+    student: StudentRecord,
+    planField: 'completedPlan1' | 'completedPlan2' | 'completedPlan3',
+    checked: boolean
+  ) => {
+    onUpdateStudent({
+      ...student,
+      [planField]: checked,
     });
   };
 
@@ -91,13 +102,11 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
       firstName: newFirstName.trim(),
       lastName: newLastName.trim(),
       classroom: newClassroom.trim() || 'ม.3/1',
-      attendanceRate: 96,
       pretest: clampScore(Number(newPretest), SCORE_MAX.pretest),
-      unit1: 16,
-      unit2: 16,
-      unit3: 17,
+      completedPlan1: true,
+      completedPlan2: true,
+      completedPlan3: true,
       posttest: clampScore(Number(newPosttest), SCORE_MAX.posttest),
-      affective: 18,
       learningStyle: newLearningStyle,
       researchTargetGroup: Number(newPretest) < 10,
       teacherNote: 'เพิ่มข้อมูลผู้เรียนใหม่เข้าสู่การวิจัย 3 แผน',
@@ -119,21 +128,20 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
       'นามสกุล',
       'ห้องเรียน',
       'สอบก่อนเรียน(20)',
-      'สอนแผนที่1(20)',
-      'สอนแผนที่2(20)',
-      'สอนแผนที่3(20)',
-      'รวม3แผนE1(60)',
-      'สอบหลังเรียนE2(20)',
-      'จิตพิสัย(20)',
-      'คะแนนรวม(100)',
+      'สอนแผนที่1',
+      'สอนแผนที่2',
+      'สอนแผนที่3',
+      'สอบหลังเรียน(20)',
+      'ผลต่างคะแนน(+/-)',
+      'ร้อยละหลังเรียน(%)',
       'เกรด',
       'NormalizedGain(g)',
     ];
 
     const rows = students.map((s) => {
-      const threePlans = calculateThreePlansScore(s);
-      const total = calculateTotalScore(s);
-      const grade = calculateThaiGrade(total);
+      const diff = calculateScoreDiff(s);
+      const postPct = calculatePosttestPct(s);
+      const grade = calculateThaiGrade(postPct);
       const gain = calculateNormalizedGain(s.pretest, s.posttest).gain;
       return [
         s.studentCode,
@@ -142,13 +150,12 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
         s.lastName,
         s.classroom,
         s.pretest,
-        s.unit1,
-        s.unit2,
-        s.unit3,
-        threePlans,
+        s.completedPlan1 ? 'เรียนแล้ว' : 'ยังไม่เรียน',
+        s.completedPlan2 ? 'เรียนแล้ว' : 'ยังไม่เรียน',
+        s.completedPlan3 ? 'เรียนแล้ว' : 'ยังไม่เรียน',
         s.posttest,
-        s.affective,
-        total,
+        diff,
+        postPct,
         grade,
         gain,
       ].join(',');
@@ -159,7 +166,10 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `sciwit_3plans_gradebook_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute(
+      'download',
+      `sciwit_prepost20_gradebook_${new Date().toISOString().slice(0, 10)}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -172,10 +182,10 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
       <div className="cartoon-card bg-[#bae6fd] p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <p className="text-xs font-bold text-slate-700">
-            สมุดบันทึกคะแนนการวิจัยในชั้นเรียน 3 แผนการเรียนรู้
+            สมุดบันทึกคะแนนการวิจัยในชั้นเรียน (ไม่เก็บคะแนนระหว่างแผน และไม่เก็บจิตพิสัย)
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
-            ตารางบันทึกคะแนน: สอบก่อนเรียน (20) · สอนแผน 1-3 (แผนละ 20) · สอบหลังเรียน (20)
+            ตารางบันทึกคะแนน: สอบก่อนเรียน (20 คะแนน) → สอนแผนที่ 1, 2, 3 → สอบหลังเรียน (20 คะแนน)
           </h1>
         </div>
 
@@ -240,7 +250,9 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
           className="cartoon-card p-5 space-y-4 bg-white"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900">เพิ่มรายชื่อนักเรียนเข้าสู่การวิจัย 3 แผน</h2>
+            <h2 className="text-base font-bold text-slate-900">
+              เพิ่มรายชื่อนักเรียนใหม่ (สอบก่อนเรียน 20 คะแนน · สอบหลังเรียน 20 คะแนน)
+            </h2>
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
@@ -404,11 +416,11 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
           />
         </div>
         <div className="text-xs font-bold text-slate-700 tabular-nums">
-          โครงสร้าง: สอบก่อนเรียน (20) · สอนแผน 1+2+3 = E1 (60) · สอบหลังเรียน E2 (20) · จิตพิสัย (20)
+          รูปแบบการวิจัย: สอบก่อนเรียน (20 คะแนน) → สอนแผนที่ 1, 2, 3 (เช็กการเข้าเรียน ไม่เก็บคะแนน) → สอบหลังเรียน (20 คะแนน)
         </div>
       </div>
 
-      {/* High-Density Cartoon Gradebook Spreadsheet Table */}
+      {/* High-Density Cartoon Gradebook Spreadsheet Table (No plan scores, No affective score) */}
       <div className="cartoon-card overflow-hidden bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -416,26 +428,25 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
               <tr className="border-b-2 border-slate-900 bg-[#fef08a] text-[11px] font-bold text-slate-900">
                 <th className="py-3 px-3 whitespace-nowrap">รหัส</th>
                 <th className="py-3 px-3 whitespace-nowrap">ชื่อ - นามสกุล</th>
-                <th className="py-3 px-2 text-right whitespace-nowrap bg-amber-100">
-                  1. สอบก่อนเรียน (20)
+                <th className="py-3 px-3 text-right whitespace-nowrap bg-amber-100">
+                  1. สอบก่อนเรียน (20 คะแนน)
                 </th>
-                <th className="py-3 px-2 text-right whitespace-nowrap bg-sky-100">
-                  สอนแผนที่ 1 (20)
+                <th className="py-3 px-2 text-center whitespace-nowrap bg-sky-100">
+                  สอนแผนที่ 1
                 </th>
-                <th className="py-3 px-2 text-right whitespace-nowrap bg-emerald-100">
-                  สอนแผนที่ 2 (20)
+                <th className="py-3 px-2 text-center whitespace-nowrap bg-emerald-100">
+                  สอนแผนที่ 2
                 </th>
-                <th className="py-3 px-2 text-right whitespace-nowrap bg-purple-100">
-                  สอนแผนที่ 3 (20)
+                <th className="py-3 px-2 text-center whitespace-nowrap bg-purple-100">
+                  สอนแผนที่ 3
+                </th>
+                <th className="py-3 px-3 text-right whitespace-nowrap bg-orange-100">
+                  2. สอบหลังเรียน (20 คะแนน)
                 </th>
                 <th className="py-3 px-2 text-right whitespace-nowrap bg-slate-100">
-                  รวม 3 แผน E1 (60)
+                  ผลต่าง (D)
                 </th>
-                <th className="py-3 px-2 text-right whitespace-nowrap bg-orange-100">
-                  2. สอบหลังเรียน E2 (20)
-                </th>
-                <th className="py-3 px-2 text-right whitespace-nowrap">จิตพิสัย (20)</th>
-                <th className="py-3 px-3 text-right whitespace-nowrap bg-slate-100">รวม (100)</th>
+                <th className="py-3 px-2 text-right whitespace-nowrap">ร้อยละหลังเรียน</th>
                 <th className="py-3 px-2 text-right whitespace-nowrap">เกรด</th>
                 <th className="py-3 px-2 text-right whitespace-nowrap">ค่า (g)</th>
                 <th className="py-3 px-3 text-center whitespace-nowrap">เป้าหมายวิจัย</th>
@@ -444,17 +455,17 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-200 text-xs">
               {filteredStudents.map((stu) => {
-                const threePlans = calculateThreePlansScore(stu);
-                const total = calculateTotalScore(stu);
-                const grade = calculateThaiGrade(total);
+                const diff = calculateScoreDiff(stu);
+                const postPct = calculatePosttestPct(stu);
+                const grade = calculateThaiGrade(postPct);
                 const gainObj = calculateNormalizedGain(stu.pretest, stu.posttest);
 
                 return (
                   <tr key={stu.id} className="hover:bg-amber-50/60 transition-colors">
-                    <td className="py-2 px-3 font-mono font-bold tabular-nums text-slate-700 whitespace-nowrap">
+                    <td className="py-2.5 px-3 font-mono font-bold tabular-nums text-slate-700 whitespace-nowrap">
                       {stu.studentCode}
                     </td>
-                    <td className="py-2 px-3 whitespace-nowrap">
+                    <td className="py-2.5 px-3 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => onSelectStudentForInspect(stu.id)}
@@ -466,78 +477,70 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
                     </td>
 
                     {/* Pre-test (20) */}
-                    <td className="py-1.5 px-2 text-right bg-amber-50/40">
+                    <td className="py-1.5 px-3 text-right bg-amber-50/40">
                       <input
                         type="number"
-                        aria-label={`pretest ของ ${stu.firstName}`}
+                        aria-label={`สอบก่อนเรียน ของ ${stu.firstName}`}
                         min={0}
                         max={20}
                         step="0.5"
                         value={stu.pretest}
                         onChange={(e) => handleScoreCellChange(stu, 'pretest', e.target.value)}
-                        className="w-16 px-1.5 py-1 text-right font-mono font-bold tabular-nums bg-white border-2 border-slate-900 rounded-md focus:outline-none"
+                        className="w-20 px-2 py-1 text-right font-mono font-bold tabular-nums bg-white border-2 border-slate-900 rounded-md focus:outline-none"
                       />
                     </td>
 
-                    {/* Lesson Plans 1, 2, 3 (20 points each) */}
+                    {/* Unscored Lesson Plans 1, 2, 3 Checkboxes */}
                     {(
                       [
-                        { field: 'unit1', max: 20 },
-                        { field: 'unit2', max: 20 },
-                        { field: 'unit3', max: 20 },
+                        { field: 'completedPlan1', label: 'สอนแผนที่ 1' },
+                        { field: 'completedPlan2', label: 'สอนแผนที่ 2' },
+                        { field: 'completedPlan3', label: 'สอนแผนที่ 3' },
                       ] as const
-                    ).map(({ field, max }) => (
-                      <td key={field} className="py-1.5 px-2 text-right">
-                        <input
-                          type="number"
-                          aria-label={`${field} ของ ${stu.firstName}`}
-                          min={0}
-                          max={max}
-                          step="0.5"
-                          value={stu[field]}
-                          onChange={(e) => handleScoreCellChange(stu, field, e.target.value)}
-                          className="w-16 px-1.5 py-1 text-right font-mono font-bold tabular-nums bg-white border-2 border-slate-900 rounded-md focus:outline-none"
-                        />
+                    ).map(({ field, label }) => (
+                      <td key={field} className="py-2 px-2 text-center">
+                        <label className="inline-flex items-center gap-1 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            aria-label={`${label} ของ ${stu.firstName}`}
+                            checked={stu[field]}
+                            onChange={(e) =>
+                              handlePlanCheckChange(stu, field, e.target.checked)
+                            }
+                            className="w-4 h-4 accent-slate-900 rounded cursor-pointer"
+                          />
+                          <span className="text-[11px] font-bold text-slate-700">
+                            {stu[field] ? 'เรียนแล้ว' : 'ขาด'}
+                          </span>
+                        </label>
                       </td>
                     ))}
 
-                    {/* Sum of 3 Plans (60) */}
-                    <td className="py-2 px-2 text-right font-mono tabular-nums font-bold text-slate-900 bg-slate-100/70">
-                      {threePlans.toFixed(1)}
-                    </td>
-
                     {/* Post-test (20) */}
-                    <td className="py-1.5 px-2 text-right bg-orange-50/40">
+                    <td className="py-1.5 px-3 text-right bg-orange-50/40">
                       <input
                         type="number"
-                        aria-label={`posttest ของ ${stu.firstName}`}
+                        aria-label={`สอบหลังเรียน ของ ${stu.firstName}`}
                         min={0}
                         max={20}
                         step="0.5"
                         value={stu.posttest}
                         onChange={(e) => handleScoreCellChange(stu, 'posttest', e.target.value)}
-                        className="w-16 px-1.5 py-1 text-right font-mono font-bold tabular-nums bg-white border-2 border-slate-900 rounded-md focus:outline-none"
+                        className="w-20 px-2 py-1 text-right font-mono font-bold tabular-nums bg-white border-2 border-slate-900 rounded-md focus:outline-none"
                       />
                     </td>
 
-                    {/* Affective (20) */}
-                    <td className="py-1.5 px-2 text-right">
-                      <input
-                        type="number"
-                        aria-label={`affective ของ ${stu.firstName}`}
-                        min={0}
-                        max={20}
-                        step="0.5"
-                        value={stu.affective}
-                        onChange={(e) => handleScoreCellChange(stu, 'affective', e.target.value)}
-                        className="w-16 px-1.5 py-1 text-right font-mono font-bold tabular-nums bg-white border-2 border-slate-900 rounded-md focus:outline-none"
-                      />
+                    {/* Score Difference (+Delta out of 20) */}
+                    <td className="py-2 px-2 text-right font-mono tabular-nums font-bold text-emerald-700 bg-slate-100/70">
+                      {diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
                     </td>
 
-                    <td className="py-2 px-3 text-right font-mono tabular-nums font-bold text-slate-900 bg-slate-100/70">
-                      {total.toFixed(1)}
+                    {/* Post-test Percentage (%) */}
+                    <td className="py-2 px-2 text-right font-mono tabular-nums font-bold text-slate-900">
+                      {postPct.toFixed(1)}%
                     </td>
 
+                    {/* Grade */}
                     <td className="py-2 px-2 text-right font-mono tabular-nums font-bold">
                       <span
                         className={
@@ -552,6 +555,7 @@ export const GradebookView: React.FC<GradebookViewProps> = ({
                       </span>
                     </td>
 
+                    {/* Normalized Gain (g) */}
                     <td className="py-2 px-2 text-right font-mono tabular-nums font-bold text-slate-800">
                       {gainObj.gain.toFixed(2)}
                     </td>

@@ -242,7 +242,7 @@ export const GoogleSheetsSyncView: React.FC<GoogleSheetsSyncViewProps> = ({
           </div>
 
           <ul className="space-y-2 text-xs font-medium text-slate-700">
-            <li>• สร้างไฟล์ Google Sheets ใหม่พร้อมคอลัมน์ สอบก่อนเรียน (20), แผนที่ 1-3 (แผนละ 20) และสอบหลังเรียน (20)</li>
+            <li>• สร้างไฟล์ Google Sheets ใหม่พร้อมคอลัมน์ สอบก่อนเรียน (20 คะแนน), สถานะเรียนแผนที่ 1-3 และสอบหลังเรียน (20 คะแนน)</li>
             <li>• ดึงข้อมูลจากไฟล์ Google Sheets เดิมที่มีอยู่มาวิเคราะห์รายบุคคลแบบเรียลไทม์</li>
             <li>• มีระบบยืนยันก่อนบันทึกทับข้อมูลทุกครั้งเพื่อความปลอดภัยของข้อมูลครูผู้สอน</li>
           </ul>
