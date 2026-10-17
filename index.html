@@ -12,6 +12,48 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Mali:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        function isExtensionError(msg, stack, filename) {
+          var combined = String(msg || '') + ' ' + String(stack || '') + ' ' + String(filename || '');
+          return (
+            combined.indexOf('chrome-extension://') !== -1 ||
+            combined.indexOf('moz-extension://') !== -1 ||
+            combined.indexOf('MetaMask') !== -1 ||
+            combined.indexOf('inpage.js') !== -1
+          );
+        }
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (
+              isExtensionError(
+                event.message,
+                event.error && event.error.stack,
+                event.filename
+              )
+            ) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+        window.addEventListener(
+          'unhandledrejection',
+          function (event) {
+            var reason = event.reason;
+            var msg = reason && (reason.message || String(reason));
+            var stack = reason && reason.stack;
+            if (isExtensionError(msg, stack, '')) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
